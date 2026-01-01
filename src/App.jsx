@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Smartphone, MoreVertical, Search, CheckCheck, User, X } from 'lucide-react';
+import { Send, Plus, Smartphone, MoreVertical, Search, CheckCheck, User, X, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 
@@ -8,21 +8,21 @@ const BACKEND_URL = "https://bruna-bot-858321630792.us-central1.run.app";
 
 export default function WhatsAppSimulator() {
   // --- ESTADOS ---
-  const [sessions, setSessions] = useState([]); // Lista de contatos na lateral
-  const [activeSession, setActiveSession] = useState(null); // Contato selecionado (Objeto inteiro)
+  const [sessions, setSessions] = useState([]); 
+  const [activeSession, setActiveSession] = useState(null); 
   
-  const [messages, setMessages] = useState([]); // Mensagens da conversa atual
+  const [messages, setMessages] = useState([]); 
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false); // Controle do Modal
+  const [isModalOpen, setIsModalOpen] = useState(false); 
   
-  // Estados do Formulário de Novo Contato
+  // Estados do Formulário
   const [newClientName, setNewClientName] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
 
   const scrollRef = useRef(null);
 
-  // --- 1. Carregar mensagens quando troca de sessão ---
+  // --- 1. Carregar mensagens ---
   useEffect(() => {
     if (!activeSession) {
         setMessages([]);
@@ -30,7 +30,6 @@ export default function WhatsAppSimulator() {
     }
 
     const fetchHistory = async () => {
-      // Busca ID da conversa no banco
       const { data: conv } = await supabase
         .from('conversations')
         .select('id')
@@ -46,38 +45,35 @@ export default function WhatsAppSimulator() {
         
         if (msgs) setMessages(msgs);
       } else {
-        setMessages([]); // Conversa nova (ainda não existe no banco)
+        setMessages([]);
       }
     };
 
     fetchHistory();
-    // (Opcional) Aqui poderia ficar o Realtime, mas vamos confiar na resposta da API para ser mais rápido
   }, [activeSession]);
 
-  // Scroll automático para o fim
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, activeSession]); // Scroll também quando abrir a conversa
 
   const scrollToBottom = () => {
     setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   };
 
-  // --- 2. Criar Nova Sessão (Modal) ---
+  // --- 2. Criar Nova Sessão ---
   const handleCreateSession = (e) => {
-    e.preventDefault(); // Evita recarregar página
+    e.preventDefault();
     if (!newClientName || !newClientPhone) return;
 
     const newSession = {
         name: newClientName,
-        phone: newClientPhone, // O ID agora é o telefone que você digitou
+        phone: newClientPhone,
         time: 'Agora'
     };
 
     setSessions(prev => [newSession, ...prev]);
-    setActiveSession(newSession);
+    setActiveSession(newSession); // Já abre o chat direto no mobile também
     
-    // Limpa e fecha modal
     setNewClientName('');
     setNewClientPhone('');
     setIsModalOpen(false);
@@ -93,18 +89,15 @@ export default function WhatsAppSimulator() {
     setInputText('');
     setIsTyping(true);
 
-    // --- ATUALIZAÇÃO OTIMISTA (Aparece na hora!) ---
-    // Adicionamos a mensagem na tela localmente antes do servidor responder
     const optimisticMsg = {
-        id: Date.now(), // ID temporário
+        id: Date.now(),
         body: textToSend,
-        direction: 'inbound', // No simulador, inbound é o "Eu/Cliente"
+        direction: 'inbound',
         created_at: new Date().toISOString()
     };
     setMessages(prev => [...prev, optimisticMsg]);
 
     try {
-      // Envia para o Backend
       const response = await fetch(`${BACKEND_URL}/simulator/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,21 +109,18 @@ export default function WhatsAppSimulator() {
       });
       
       const data = await response.json();
-      
       if (!response.ok) throw new Error(data.detail || 'Erro ao enviar');
 
-      // --- RESPOSTA DA IA ---
-      // Quando a Bruna responde, adicionamos o balão dela
       const aiMsg = {
         id: Date.now() + 1,
         body: data.reply,
-        direction: 'outbound', // Outbound é a Bruna
+        direction: 'outbound',
         created_at: new Date().toISOString()
       };
       setMessages(prev => [...prev, aiMsg]);
 
     } catch (error) {
-      console.error("Erro no simulador:", error);
+      console.error("Erro:", error);
       alert(`Erro: ${error.message}`);
     } finally {
         setIsTyping(false);
@@ -140,13 +130,13 @@ export default function WhatsAppSimulator() {
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden font-sans relative">
       
-      {/* --- MODAL DE NOVA CONVERSA --- */}
+      {/* --- MODAL (Responsivo) --- */}
       {isModalOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-white rounded-xl shadow-2xl p-6 w-96"
+                className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md"
             >
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-gray-800">Nova Conversa</h2>
@@ -157,21 +147,21 @@ export default function WhatsAppSimulator() {
                 
                 <form onSubmit={handleCreateSession} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">Nome do Cliente</label>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Nome</label>
                         <input 
                             autoFocus
                             type="text" 
-                            className="w-full p-2 border border-gray-300 rounded focus:border-teal-500 outline-none"
-                            placeholder="Ex: João da Silva"
+                            className="w-full p-3 border border-gray-300 rounded focus:border-teal-500 outline-none text-base"
+                            placeholder="Ex: Cliente João"
                             value={newClientName}
                             onChange={e => setNewClientName(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">Número (ID)</label>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Telefone (ID)</label>
                         <input 
-                            type="text" 
-                            className="w-full p-2 border border-gray-300 rounded focus:border-teal-500 outline-none"
+                            type="tel" 
+                            className="w-full p-3 border border-gray-300 rounded focus:border-teal-500 outline-none text-base"
                             placeholder="Ex: 5511999999999"
                             value={newClientPhone}
                             onChange={e => setNewClientPhone(e.target.value)}
@@ -180,7 +170,7 @@ export default function WhatsAppSimulator() {
                     <button 
                         type="submit"
                         disabled={!newClientName || !newClientPhone}
-                        className="w-full bg-teal-600 text-white py-2 rounded font-semibold hover:bg-teal-700 disabled:opacity-50 transition"
+                        className="w-full bg-teal-600 text-white py-3 rounded font-semibold hover:bg-teal-700 disabled:opacity-50 transition active:scale-95"
                     >
                         Iniciar Conversa
                     </button>
@@ -189,40 +179,51 @@ export default function WhatsAppSimulator() {
         </div>
       )}
 
-      {/* --- SIDEBAR --- */}
-      <div className="w-[30%] max-w-[400px] bg-white border-r border-gray-300 flex flex-col">
-        <div className="bg-[#f0f2f5] p-4 flex justify-between items-center h-[60px] border-b border-gray-200">
+      {/* --- SIDEBAR (Lista) --- 
+          Lógica Mobile: Se tem activeSession, esconde a sidebar (hidden). 
+          No Desktop (md:flex), sempre mostra.
+      */}
+      <div className={`
+          flex-col bg-white border-r border-gray-300 
+          w-full md:w-[30%] md:max-w-[400px] 
+          ${activeSession ? 'hidden md:flex' : 'flex'}
+      `}>
+        {/* Header Sidebar */}
+        <div className="bg-[#f0f2f5] p-4 flex justify-between items-center h-[60px] border-b border-gray-200 shrink-0">
           <div className="font-bold text-gray-600 flex items-center gap-2">
-            <Smartphone size={20} /> Simulador
+            <Smartphone size={20} /> <span className="hidden sm:inline">Simulador</span>
           </div>
           <div className="flex gap-4 text-gray-500">
-            <button onClick={() => setIsModalOpen(true)} title="Adicionar Número" className="bg-white p-1 rounded-full shadow hover:text-teal-600 transition">
+            <button onClick={() => setIsModalOpen(true)} className="bg-white p-2 rounded-full shadow hover:text-teal-600 transition active:scale-90">
               <Plus size={20} />
             </button>
             <MoreVertical size={20} />
           </div>
         </div>
 
+        {/* Lista */}
         <div className="flex-1 overflow-y-auto">
           {sessions.length === 0 ? (
-              <div className="text-center mt-10 text-gray-400 p-4">
-                  <p>Nenhuma conversa.</p>
-                  <p className="text-sm">Clique no "+" para adicionar.</p>
+              <div className="text-center mt-20 text-gray-400 p-6">
+                  <p className="mb-2">Nenhuma conversa ativa.</p>
+                  <button onClick={() => setIsModalOpen(true)} className="text-teal-600 font-medium hover:underline">
+                      Criar nova conversa
+                  </button>
               </div>
           ) : (
             sessions.map((session, idx) => (
                 <div 
                 key={idx}
                 onClick={() => setActiveSession(session)}
-                className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-[#f5f6f6] transition ${activeSession?.phone === session.phone ? 'bg-[#f0f2f5]' : ''}`}
+                className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-[#f5f6f6] transition border-b border-gray-100 ${activeSession?.phone === session.phone ? 'bg-[#f0f2f5]' : ''}`}
                 >
-                <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden shrink-0">
                     <User className="text-white" size={24} />
                 </div>
-                <div className="flex-1 border-b border-gray-100 pb-3">
-                    <div className="flex justify-between items-center">
-                    <span className="font-medium text-gray-900">{session.name}</span>
-                    <span className="text-xs text-gray-400">{session.time}</span>
+                <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-1">
+                    <span className="font-medium text-gray-900 truncate">{session.name}</span>
+                    <span className="text-xs text-gray-400 shrink-0 ml-2">{session.time}</span>
                     </div>
                     <div className="text-sm text-gray-500 truncate">
                     {session.phone}
@@ -234,23 +235,38 @@ export default function WhatsAppSimulator() {
         </div>
       </div>
 
-      {/* --- CHAT AREA --- */}
-      <div className="flex-1 flex flex-col bg-[#efeae2] relative">
-        <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")' }}></div>
+      {/* --- CHAT AREA --- 
+          Lógica Mobile: Se NÃO tem activeSession, esconde o chat (hidden).
+          No Desktop (md:flex), sempre mostra se tiver activeSession, ou placeholder.
+      */}
+      <div className={`
+          flex-col bg-[#efeae2] relative w-full md:flex-1
+          ${!activeSession ? 'hidden md:flex' : 'flex'}
+      `}>
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")' }}></div>
 
         {activeSession ? (
             <>
                 {/* Header Chat */}
-                <div className="bg-[#f0f2f5] px-4 py-3 flex justify-between items-center h-[60px] border-l border-gray-300 z-10 shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                <div className="bg-[#f0f2f5] px-4 py-2 flex justify-between items-center h-[60px] border-l border-gray-300 z-10 shadow-sm shrink-0">
+                <div className="flex items-center gap-3 overflow-hidden">
+                    {/* Botão Voltar (SÓ NO MOBILE) */}
+                    <button 
+                        onClick={() => setActiveSession(null)} 
+                        className="md:hidden text-gray-600 hover:bg-gray-200 p-1 rounded-full mr-1"
+                    >
+                        <ArrowLeft size={24} />
+                    </button>
+
+                    <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden shrink-0">
                         <User className="text-white" size={24} />
                     </div>
-                    <div>
-                    <div className="font-medium text-gray-900">{activeSession.name}</div>
-                    <div className="text-xs text-gray-500">
-                        {isTyping ? <span className="text-teal-600 font-bold">digitando...</span> : 'online'}
-                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="font-medium text-gray-900 truncate">{activeSession.name}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                            {isTyping ? <span className="text-teal-600 font-bold">digitando...</span> : 'online'}
+                        </div>
                     </div>
                 </div>
                 </div>
@@ -258,9 +274,9 @@ export default function WhatsAppSimulator() {
                 {/* Messages List */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 z-10 custom-scrollbar">
                     {messages.length === 0 && (
-                        <div className="flex justify-center mt-10">
-                            <span className="bg-[#ffeecd] text-gray-800 text-xs px-3 py-1 rounded shadow text-center">
-                                Esta é uma simulação. As mensagens enviadas aqui <br/>serão processadas pela IA como se viessem deste número.
+                        <div className="flex justify-center mt-10 px-6">
+                            <span className="bg-[#ffeecd] text-gray-800 text-xs px-3 py-2 rounded shadow text-center leading-relaxed">
+                                🔒 Esta é uma simulação. Mensagens enviadas aqui interagem diretamente com a Bruna.
                             </span>
                         </div>
                     )}
@@ -276,7 +292,7 @@ export default function WhatsAppSimulator() {
                             className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                             >
                             <div className={`
-                                max-w-[65%] px-4 py-2 rounded-lg shadow-sm text-[14.2px] leading-5 relative
+                                max-w-[85%] md:max-w-[65%] px-3 py-2 rounded-lg shadow-sm text-[15px] leading-snug relative break-words
                                 ${isMe ? 'bg-[#d9fdd3] rounded-tr-none' : 'bg-white rounded-tl-none'}
                             `}>
                                 <div className={`absolute top-0 w-0 h-0 border-[6px] border-transparent 
@@ -284,7 +300,7 @@ export default function WhatsAppSimulator() {
                                 `}></div>
                                 <div className="text-gray-800 whitespace-pre-wrap">{msg.body}</div>
                                 <div className="flex justify-end items-center gap-1 mt-1 -mb-1 opacity-60">
-                                <span className="text-[11px]">
+                                <span className="text-[11px] min-w-[50px] text-right">
                                     {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                                 {isMe && <CheckCheck size={14} className="text-blue-500" />}
@@ -298,33 +314,36 @@ export default function WhatsAppSimulator() {
                 </div>
 
                 {/* Input Area */}
-                <div className="bg-[#f0f2f5] px-4 py-3 z-10">
-                <div className="flex items-center gap-2">
-                    <input
-                    type="text"
-                    className="flex-1 py-3 px-4 rounded-lg border-none focus:ring-0 focus:outline-none bg-white text-gray-700 placeholder-gray-400"
-                    placeholder="Digite uma mensagem"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                    autoFocus
-                    />
+                <div className="bg-[#f0f2f5] px-2 py-2 md:px-4 md:py-3 z-10 shrink-0">
+                <div className="flex items-end gap-2 max-w-full">
+                    <div className="bg-white flex-1 rounded-2xl border border-gray-100 flex items-center px-4 py-2 shadow-sm">
+                        <input
+                        type="text"
+                        className="flex-1 border-none focus:ring-0 focus:outline-none bg-transparent text-gray-700 placeholder-gray-400 max-h-32 overflow-y-auto"
+                        placeholder="Mensagem"
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                        enterKeyHint="send" // Melhora o teclado no celular
+                        />
+                    </div>
                     <button 
                     onClick={handleSendMessage}
-                    className={`p-3 rounded-full transition ${inputText.trim() ? 'text-[#00a884] hover:bg-gray-200' : 'text-gray-400'}`}
+                    className={`p-3 rounded-full transition shadow-sm mb-0.5 ${inputText.trim() ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-200 text-gray-400'}`}
                     >
-                    <Send size={24} />
+                    <Send size={20} />
                     </button>
                 </div>
                 </div>
             </>
         ) : (
-            // Placeholder quando não tem conversa selecionada
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-500 border-b-[6px] border-[#4ad978]">
+            // Placeholder Desktop
+            <div className="hidden md:flex flex-1 flex-col items-center justify-center text-gray-500 border-b-[6px] border-[#4ad978] h-full">
                 <Smartphone size={64} className="mb-4 text-gray-300" />
-                <h1 className="text-2xl font-light text-gray-600 mb-2">Simulador WhatsApp</h1>
-                <p className="text-sm text-center max-w-md">
-                    Clique no botão <strong>+</strong> para iniciar uma nova conversa simulada com um cliente específico.
+                <h1 className="text-2xl font-light text-gray-600 mb-2">Simulador Mobile</h1>
+                <p className="text-sm text-center max-w-md px-4">
+                    Agora otimizado para celulares! <br/>
+                    Selecione ou crie uma conversa para começar.
                 </p>
             </div>
         )}
